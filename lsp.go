@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
+	"net/url"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -27,6 +31,7 @@ type Response struct {
 }
 
 type Lsp struct {
+	Id      int
 	Command *exec.Cmd
 	Writer  io.WriteCloser
 	Reader  io.ReadCloser
@@ -36,20 +41,21 @@ func NewLsp(lspServerPath string) *Lsp {
 	command := exec.Command(lspServerPath)
 	stdin, _ := command.StdinPipe()
 	stdout, _ := command.StdoutPipe()
-	return &Lsp{Command: command, Writer: stdin, Reader: stdout}
+	command.Start()
+	return &Lsp{Id: 1, Command: command, Writer: stdin, Reader: stdout}
+}
+
+func (l *Lsp) Close() {
+	l.Reader.Close()
+	l.Writer.Close()
 }
 
 func (l *Lsp) Init(rootPath string) {
 	initializedParams := p.InitializeParams{
 		ProcessID: 1,
 		RootPath:  rootPath,
-		//RootURI:   "file://" + rootPath,
+		RootURI:   getURI(rootPath),
 		Capabilities: p.ClientCapabilities{
-			TextDocument: &p.TextDocumentClientCapabilities{
-				Completion: &p.CompletionTextDocumentClientCapabilities{
-					CompletionItem: &p.CompletionTextDocumentClientCapabilitiesItem{},
-				},
-			},
 			Window: &p.WindowClientCapabilities{},
 			Workspace: &p.WorkspaceClientCapabilities{
 				CodeLens: &p.CodeLensWorkspaceClientCapabilities{
@@ -66,13 +72,65 @@ func (l *Lsp) Init(rootPath string) {
 		},
 	}
 
-	l.Command.Start()
-	l.sendCommand(1, p.MethodInitialize, initializedParams)
+	l.sendCommand(l.Id, p.MethodInitialize, initializedParams)
+
+	l.sendCommand(l.Id, p.MethodInitialized, map[string]interface{}{})
 }
 
-func (l *Lsp) Close() {
-	l.Reader.Close()
-	l.Writer.Close()
+func (l *Lsp) DidOpen(filePath string) *Response {
+
+	uri := getURI(filePath)
+
+	text, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		log.Fatal(err)
+		return nil
+	}
+
+	didOpenParams := p.DidOpenTextDocumentParams{
+		TextDocument: p.TextDocumentItem{
+			Text:       string(text),
+			Version:    1,
+			LanguageID: "go",
+			URI:        uri,
+		},
+	}
+	result := l.sendCommand(
+		l.Id,
+		p.MethodTextDocumentDidOpen,
+		didOpenParams,
+	)
+	return result
+}
+
+func (l *Lsp) Completion(filePath string, row uint32, col uint32) *Response {
+	params := p.CompletionParams{
+		TextDocumentPositionParams: p.TextDocumentPositionParams{
+			Position:     p.Position{Line: row, Character: col},
+			TextDocument: p.TextDocumentIdentifier{URI: getURI(filePath)},
+		},
+		Context: &p.CompletionContext{
+			TriggerKind: 1,
+		},
+	}
+	result := l.sendCommand(l.Id, p.MethodTextDocumentCompletion, params)
+	return result
+}
+
+func getURI(filePath string) p.DocumentURI {
+	path := filepath.Clean(filePath)
+	path = filepath.ToSlash(path)
+	volume := filepath.VolumeName(path)
+	if strings.HasSuffix(volume, ":") {
+		path = "/" + path
+	}
+
+	u := &url.URL{
+		Scheme: "file",
+		Path:   path,
+	}
+	uri := p.DocumentURI(u.String())
+	return uri
 }
 
 func (l *Lsp) sendCommand(id int, method string, params interface{}) *Response {
