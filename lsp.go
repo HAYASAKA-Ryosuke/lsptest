@@ -32,15 +32,14 @@ type Lsp struct {
 	Reader  io.ReadCloser
 }
 
-func NewLsp() *Lsp {
-	command := exec.Command("/home/hayasaka/go/bin/gopls")
+func NewLsp(lspServerPath string) *Lsp {
+	command := exec.Command(lspServerPath)
 	stdin, _ := command.StdinPipe()
 	stdout, _ := command.StdoutPipe()
 	return &Lsp{Command: command, Writer: stdin, Reader: stdout}
 }
 
 func (l *Lsp) Init(rootPath string) {
-	l.Command.Start()
 	initializedParams := p.InitializeParams{
 		ProcessID: 1,
 		RootPath:  rootPath,
@@ -67,6 +66,7 @@ func (l *Lsp) Init(rootPath string) {
 		},
 	}
 
+	l.Command.Start()
 	l.sendCommand(1, p.MethodInitialize, initializedParams)
 }
 
