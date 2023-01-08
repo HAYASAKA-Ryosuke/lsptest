@@ -103,6 +103,12 @@ func (l *Lsp) DidOpen(filePath string) *Response {
 	return result
 }
 
+func (l *Lsp) DocumentSymbol(filePath string) *Response {
+	params := p.DocumentSymbolParams{TextDocument: p.TextDocumentIdentifier{URI: getURI(filePath)}}
+	result := l.sendCommand(l.Id, p.MethodTextDocumentDocumentSymbol, params)
+	return result
+}
+
 func (l *Lsp) Completion(filePath string, row uint32, col uint32) *Response {
 	params := p.CompletionParams{
 		TextDocumentPositionParams: p.TextDocumentPositionParams{
@@ -149,30 +155,35 @@ func (l *Lsp) sendCommand(id int, method string, params interface{}) *Response {
 
 	l.Writer.Write([]byte(fmt.Sprintf("Content-Length: %v\r\n\r\n%s", len(b), b)))
 
-	buff := make([]byte, 1024)
-	n, err := l.Reader.Read(buff)
+	for {
+		buff := make([]byte, 1024)
+		n, err := l.Reader.Read(buff)
 
-	contentLength, err := strconv.Atoi(strings.Split(strings.Split(string(buff[:n]), "Content-Length: ")[1], "\r\n")[0])
-	if err != nil {
-		fmt.Printf("missing Content-Length: %v\n", err)
-		return nil
+		contentLength, err := strconv.Atoi(strings.Split(strings.Split(string(buff[:n]), "Content-Length: ")[1], "\r\n")[0])
+		if err != nil {
+			fmt.Printf("missing Content-Length: %v\n", err)
+			return nil
+		}
+		rawBody := make([]byte, contentLength)
+
+		bodyIndex := copy(rawBody, strings.Split(string(buff[:n]), "\r\n\r\n")[1])
+
+		n, err = l.Reader.Read(rawBody[bodyIndex:])
+
+		if err != nil {
+			fmt.Println("failed read body")
+			return nil
+		}
+		var response Response
+		if err := json.Unmarshal(rawBody, &response); err != nil {
+			fmt.Printf("error Unmarshalling response: %v\n", err)
+			return nil
+		}
+
+		// 異なるIDの通信は無視
+		if response.ID != l.Id {
+			continue
+		}
+		return &response
 	}
-	rawBody := make([]byte, contentLength)
-
-	bodyIndex := copy(rawBody, strings.Split(string(buff[:n]), "\r\n\r\n")[1])
-
-	n, err = l.Reader.Read(rawBody[bodyIndex:])
-
-	if err != nil {
-		fmt.Println("failed read body")
-		return nil
-	}
-	var response Response
-	if err := json.Unmarshal(rawBody, &response); err != nil {
-		fmt.Printf("error Unmarshalling response: %v\n", err)
-		return nil
-	}
-
-	fmt.Printf("response: %v\n", response)
-	return &response
 }
