@@ -38,11 +38,12 @@ type Lsp struct {
 }
 
 func NewLsp(lspServerPath string) *Lsp {
-	command := exec.Command(lspServerPath)
+	fmt.Println(lspServerPath)
+	command := exec.Command("/home/hayasaka/go/bin/gopls", "-rpc.trace")
 	stdin, _ := command.StdinPipe()
 	stdout, _ := command.StdoutPipe()
 	command.Start()
-	return &Lsp{Id: 1, Command: command, Writer: stdin, Reader: stdout}
+	return &Lsp{Id: 1321, Command: command, Writer: stdin, Reader: stdout}
 }
 
 func (l *Lsp) Close() {
@@ -52,7 +53,7 @@ func (l *Lsp) Close() {
 
 func (l *Lsp) Init(rootPath string) {
 	initializedParams := p.InitializeParams{
-		ProcessID: 1,
+		ProcessID: int32(l.Id),
 		RootPath:  rootPath,
 		RootURI:   getURI(rootPath),
 		Capabilities: p.ClientCapabilities{
@@ -156,7 +157,7 @@ func (l *Lsp) sendCommand(id int, method string, params interface{}) *Response {
 	l.Writer.Write([]byte(fmt.Sprintf("Content-Length: %v\r\n\r\n%s", len(b), b)))
 
 	for {
-		buff := make([]byte, 1024)
+		buff := make([]byte, 64)
 		n, err := l.Reader.Read(buff)
 
 		contentLength, err := strconv.Atoi(strings.Split(strings.Split(string(buff[:n]), "Content-Length: ")[1], "\r\n")[0])
@@ -184,6 +185,7 @@ func (l *Lsp) sendCommand(id int, method string, params interface{}) *Response {
 		if response.ID != l.Id {
 			continue
 		}
+		fmt.Println(response.Result)
 		return &response
 	}
 }
