@@ -110,7 +110,7 @@ func (l *Lsp) DocumentSymbol(filePath string) *Response {
 	return result
 }
 
-func (l *Lsp) Completion(filePath string, row uint32, col uint32) *Response {
+func (l *Lsp) Completion(filePath string, row uint32, col uint32) *p.CompletionList {
 	params := p.CompletionParams{
 		TextDocumentPositionParams: p.TextDocumentPositionParams{
 			Position:     p.Position{Line: row, Character: col},
@@ -120,8 +120,17 @@ func (l *Lsp) Completion(filePath string, row uint32, col uint32) *Response {
 			TriggerKind: 1,
 		},
 	}
-	result := l.sendCommand(l.Id, p.MethodTextDocumentCompletion, params)
-	return result
+	response := l.sendCommand(l.Id, p.MethodTextDocumentCompletion, params)
+	b, err := json.Marshal(response.Result)
+	if err != nil {
+		return nil
+	}
+	var result p.CompletionList
+	err = json.Unmarshal(b, &result)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return &result
 }
 
 func getURI(filePath string) p.DocumentURI {
@@ -185,7 +194,6 @@ func (l *Lsp) sendCommand(id int, method string, params interface{}) *Response {
 		if response.ID != l.Id {
 			continue
 		}
-		fmt.Println(response.Result)
 		return &response
 	}
 }
