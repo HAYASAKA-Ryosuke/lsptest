@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -131,6 +132,14 @@ func (l *Lsp) Completion(filePath string, row uint32, col uint32) *p.CompletionL
 		fmt.Println(err)
 	}
 	return &result
+}
+
+func (l *Lsp) Shutdown() error {
+	response := l.sendCommand(l.Id, p.MethodShutdown, map[string]interface{}{})
+	if response.Error != nil {
+		return errors.New("shutdown error")
+	}
+	return nil
 }
 
 func getURI(filePath string) p.DocumentURI {

@@ -6,4 +6,5 @@ func main() {
 	lsp.Init(path)
 	lsp.DidOpen("/home/hayasaka/go/src/lsptest/test.go")
 	lsp.Completion("/home/hayasaka/go/src/lsptest/test.go", 5, 2)
+	lsp.Shutdown()
 }
